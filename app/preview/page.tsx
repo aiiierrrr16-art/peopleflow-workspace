@@ -894,13 +894,21 @@ export default function PreviewV2() {
   return (
     <main className="v2-shell">
       <aside className="v2-sidebar">
-        <div className="v2-brand">
+        <button
+          className="v2-brand"
+          aria-label="返回岗位人才库首页"
+          onClick={() => {
+            setEditing(false);
+            setView("jobs");
+            setStage("全部");
+          }}
+        >
           <span>P</span>
           <div>
             <strong>PeopleFlow</strong>
             <small>PEOPLE WORKSPACE</small>
           </div>
-        </div>
+        </button>
         <nav>
           <button
             className={view === "jobs" ? "active" : ""}
@@ -1908,43 +1916,84 @@ function ResumeEditor({
     link.click();
     URL.revokeObjectURL(url);
   };
+  const skillHighlights = Array.from(
+    new Set([
+      ...selectedTags,
+      ...draft.skillsText.split(/[、，,;\n]/).map((item) => item.trim()).filter(Boolean),
+    ]),
+  ).slice(0, 5);
+  const riskItems = [
+    !draft.name || draft.name === "待确认姓名" ? "姓名未完整识别" : "",
+    !draft.phone ? "手机号未识别" : "",
+    !draft.email ? "邮箱未识别" : "",
+    !draft.city ? "所在城市未确认" : "",
+    !draft.years ? "未找到明确的工作年限" : "工作年限由系统提取，请人工核对",
+    !draft.education ? "教育背景或毕业时间未识别" : "",
+    draft.parseWarning || "",
+  ].filter(Boolean);
+  const experienceHighlights = draft.experience
+    .split(/\n{2,}|(?=\n[^\n]{2,24}(?:公司|集团|科技|有限))/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const matchLevel = riskItems.length <= 2 ? "较匹配" : "待确认";
   return (
     <section className="v2-editor-page">
       <div className="v2-editor-head">
         <div>
           <button className="v2-editor-back" onClick={onExit}>‹ {exitLabel}</button>
-          <span className="eyebrow">真实文件已读取 · 请人工检查</span>
-          <h2>{draft.name || "待补录姓名"}的简历</h2>
-          <p>
-            来源文件：{draft.fileName}。左侧为实际提取文字，右侧字段均可修改。
-          </p>
+          <span className="eyebrow">真实文件已读取 · 人工确认后入库</span>
+          <h2>{draft.name || "待补录姓名"}的人才摘要</h2>
+          <p>先确认候选人定位、匹配建议与待核对项，再编辑完整档案。来源：{draft.fileName}</p>
         </div>
         <div>
           <button onClick={exportWord}>导出 Word</button>
-          <button className="dark" onClick={() => saved(draft)}>
-            保存简历
-          </button>
+          <button className="dark" onClick={() => saved(draft)}>保存到人才库</button>
         </div>
       </div>
-      {draft.parseWarning && (
-        <div className="v2-parse-warning">{draft.parseWarning}</div>
-      )}
-      <div className="v2-editor-grid">
-        <aside className="v2-original">
-          <small>原文件提取内容</small>
-          <div className="v2-paper actual">
-            <b>{draft.fileName}</b>
-            <pre>
-              {draft.rawText ||
-                "当前文件没有可提取文字。原文件已经保存，请根据原文件在右侧人工录入。"}
-            </pre>
-          </div>
-        </aside>
+      <div className="v2-review-summary">
+        <article><small>候选人定位</small><b>{draft.job || "待确认岗位"}</b></article>
+        <article><small>工作年限</small><b>{draft.years ? `${draft.years}年` : "待确认"}</b></article>
+        <article><small>最近公司</small><b>{draft.company || "待确认"}</b></article>
+        <article><small>三项核心能力</small><b>{skillHighlights.slice(0, 3).join(" · ") || "待提炼"}</b></article>
+        <article><small>推荐岗位</small><b>{draft.job || "待匹配"}</b></article>
+        <article className={riskItems.length ? "attention" : "complete"}><small>待确认问题</small><b>{riskItems.length} 项</b></article>
+      </div>
+
+      <section className="v2-review-section identity">
+        <header><small>01 · TALENT SUMMARY</small><h3>人才摘要</h3></header>
+        <div className="v2-identity-grid">
+          <div><span>基本身份</span><b>{draft.name || "待确认姓名"}</b><p>{[draft.city, draft.phone, draft.email].filter(Boolean).join(" · ") || "联系方式待补充"}</p></div>
+          <div><span>候选人定位</span><b>{draft.job || "待确认岗位"}</b><p>{draft.company || "最近公司待确认"}{draft.years ? ` · ${draft.years}年经验` : ""}</p></div>
+          <div className="wide"><span>核心优势</span><p className="v2-skill-pills">{skillHighlights.length ? skillHighlights.map((skill) => <i key={skill}>{skill}</i>) : "待从简历与面试中提炼"}</p></div>
+        </div>
+      </section>
+
+      <section className="v2-review-section match">
+        <header><small>02 · MATCHING</small><h3>岗位匹配建议</h3></header>
+        <div className="v2-match-card">
+          <div><small>规则初判</small><strong>{matchLevel}</strong><span>建议岗位：{draft.job || "待选择"}</span></div>
+          <div><b>为什么匹配</b><p>{skillHighlights.length ? `已识别 ${skillHighlights.slice(0, 3).join("、")} 等与岗位相关的经验信号。` : "尚未提取足够能力信号，需人工判断。"}</p></div>
+          <div><b>明显缺口</b><p>{riskItems.slice(0, 2).join("；") || "暂未发现必填信息缺口，仍需面试验证。"}</p></div>
+        </div>
+      </section>
+
+      <section className="v2-review-section experience">
+        <header><small>03 · EXPERIENCE</small><h3>关键经历</h3></header>
+        <div className="v2-experience-list">
+          {(experienceHighlights.length ? experienceHighlights : ["未找到可靠的工作经历，请打开完整档案补录。"]).map((item, index) => <article key={`${index}-${item.slice(0, 12)}`}><span>0{index + 1}</span><p>{item}</p></article>)}
+        </div>
+        <div className="v2-education-summary"><small>最高教育背景</small><p>{draft.education || "学历、学校、专业或毕业时间待补充。"}</p></div>
+      </section>
+
+      <section className="v2-review-section risks">
+        <header><small>04 · HUMAN REVIEW</small><h3>风险与待确认项</h3><span>{riskItems.length} 项需要人工处理</span></header>
+        <div className="v2-risk-list">{riskItems.length ? riskItems.map((item, index) => <p key={`${index}-${item}`}><b>!</b><span>{item}</span></p>) : <p className="clear"><b>✓</b><span>必填字段已识别，请根据原始简历完成最终核对。</span></p>}</div>
+      </section>
+
+      <details className="v2-full-profile" open>
+        <summary><span>05 · EDITABLE PROFILE</span><b>完整可编辑档案</b><em>展开 / 收起</em></summary>
         <div className="v2-form">
-          <div className="v2-form-title">
-            <h3>标准人才档案</h3>
-            <span>{draft.rawText ? "来自真实文件" : "待人工补录"}</span>
-          </div>
           <div className="v2-form-grid">
             <label>
               姓名
@@ -2069,7 +2118,7 @@ function ResumeEditor({
               />
             </label>
             <details className="wide v2-raw-details">
-              <summary>查看和校对原始提取文字</summary>
+              <summary>查看原始提取文字（仅作核对证据）</summary>
               <textarea
                 value={draft.rawText}
                 onChange={(event) => update("rawText", event.target.value)}
@@ -2088,7 +2137,12 @@ function ResumeEditor({
             <button onClick={openTags}>管理标签 ＋</button>
           </div>
         </div>
-      </div>
+      </details>
+
+      <section className="v2-save-panel">
+        <div><small>06 · SAVE</small><h3>确认入库设置</h3><p>保存前请确认匹配岗位、初始阶段、人才标签和待核对问题。</p></div>
+        <button className="dark" onClick={() => saved(draft)}>保存到人才库</button>
+      </section>
     </section>
   );
 }
