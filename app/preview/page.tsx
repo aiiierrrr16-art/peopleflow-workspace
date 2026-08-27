@@ -689,6 +689,9 @@ export default function PreviewV2() {
   const [shareFeedback, setShareFeedback] = useState<Array<{ id: number; candidateName: string; reviewer: string; decision: string; comment: string; createdAt: string }>>([]);
   const [feedbackRecord, setFeedbackRecord] = useState("");
   const [lanOrigin, setLanOrigin] = useState("");
+  const [userProfile, setUserProfile] = useState({ name: "May", role: "人事管理员" });
+  const [profileDraft, setProfileDraft] = useState({ name: "May", role: "人事管理员" });
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([previewApi("/jobs"), previewApi("/candidates"), previewApi("/employees")])
@@ -698,7 +701,28 @@ export default function PreviewV2() {
         if (savedEmployees.length) setShareEmployeeList(savedEmployees);
       })
       .catch((error) => console.error("读取本地调试数据失败", error));
+    previewApi("/settings/profile")
+      .then((profile) => {
+        if (!profile?.name || !profile?.role) return;
+        const savedProfile = { name: String(profile.name), role: String(profile.role) };
+        setUserProfile(savedProfile);
+        setProfileDraft(savedProfile);
+      })
+      .catch((error) => console.error("读取个人资料失败", error));
   }, []);
+
+  const openProfileEditor = () => {
+    setProfileDraft(userProfile);
+    setProfileEditorOpen(true);
+  };
+  const saveUserProfile = async () => {
+    const next = { name: profileDraft.name.trim(), role: profileDraft.role.trim() };
+    if (!next.name || !next.role) return;
+    await previewApi("/settings/profile", { method: "PUT", body: JSON.stringify(next) });
+    setUserProfile(next);
+    setProfileDraft(next);
+    setProfileEditorOpen(false);
+  };
 
   const title =
     view === "jobs"
@@ -912,13 +936,14 @@ export default function PreviewV2() {
           <b>本地私有空间</b>
           <p>资料仅保存在公司电脑</p>
         </div>
-        <footer>
-          <span>M</span>
+        <button className="v2-user-profile" onClick={openProfileEditor} aria-label="编辑姓名和身份">
+          <span>{userProfile.name.slice(0, 1).toUpperCase()}</span>
           <div>
-            <b>May</b>
-            <small>人事管理员</small>
+            <b>{userProfile.name}</b>
+            <small>{userProfile.role}</small>
           </div>
-        </footer>
+          <em>编辑</em>
+        </button>
       </aside>
 
       <section className="v2-main">
@@ -1041,6 +1066,31 @@ export default function PreviewV2() {
         )}
         {view === "employees" && <EmployeeDepartmentView />}
       </section>
+
+      {profileEditorOpen && (
+        <div className="v2-overlay centered" onMouseDown={() => setProfileEditorOpen(false)}>
+          <section className="v2-profile-editor" onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div>
+                <small>PERSONAL PROFILE</small>
+                <h2>设置个人信息</h2>
+                <p>用于工作台左侧显示，信息仅保存在当前本地工作台。</p>
+              </div>
+              <button className="v2-close profile-close" aria-label="关闭" onClick={() => setProfileEditorOpen(false)} />
+            </header>
+            <div className="v2-profile-preview">
+              <span>{(profileDraft.name.trim() || "我").slice(0, 1).toUpperCase()}</span>
+              <div><b>{profileDraft.name.trim() || "你的名字"}</b><small>{profileDraft.role.trim() || "你的身份"}</small></div>
+            </div>
+            <div className="v2-profile-fields">
+              <label>显示姓名<input autoFocus maxLength={24} value={profileDraft.name} onChange={(event) => setProfileDraft((value) => ({ ...value, name: event.target.value }))} placeholder="例如：May、王小明" /></label>
+              <label>身份<input list="peopleflow-profile-roles" maxLength={32} value={profileDraft.role} onChange={(event) => setProfileDraft((value) => ({ ...value, role: event.target.value }))} placeholder="例如：人事管理员" /></label>
+              <datalist id="peopleflow-profile-roles"><option value="人事管理员"/><option value="招聘负责人"/><option value="HRBP"/><option value="部门负责人"/><option value="面试官"/></datalist>
+            </div>
+            <footer><button onClick={() => setProfileEditorOpen(false)}>取消</button><button className="dark" disabled={!profileDraft.name.trim() || !profileDraft.role.trim()} onClick={saveUserProfile}>保存设置</button></footer>
+          </section>
+        </div>
+      )}
 
       {shareCenterOpen && (
         <div className="v2-overlay centered" onMouseDown={() => setShareCenterOpen(false)}>
