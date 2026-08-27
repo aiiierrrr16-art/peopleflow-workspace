@@ -1,0 +1,51 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Showcase = {
+  generatedAt: string;
+  expiresAt: string | null;
+  audience: string;
+  sections: { summary: boolean; jobs: boolean; stages: boolean; candidates: boolean; departments: boolean; employees: boolean };
+  summary: { jobs: number; candidates: number; active: number; offers: number; employees: number; probation: number };
+  jobs: Array<{ name: string; dept: string; total: number; pending: number; initial: number; final: number; offer: number }>;
+  stages: Array<{ name: string; count: number }>;
+  candidates: Array<{ name: string; job: string; meta: string; tags: string[]; stage: string; evaluation: string; latestUpdate: string; nextAction: string; nextTime: string }>;
+  departments: Array<{ name: string; count: number }>;
+  employees: Array<{ name: string; role: string; department: string; status: string; joined: string; location: string; skills: string[]; review: string; manager: string }>;
+};
+
+export default function ShowcasePage() {
+  const [data, setData] = useState<Showcase | null>(null);
+  const [error, setError] = useState("");
+  const [selectedPerson, setSelectedPerson] = useState<Showcase["candidates"][number] | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Showcase["employees"][number] | null>(null);
+  const [shareToken, setShareToken] = useState("");
+  const [reviewer, setReviewer] = useState("");
+  const [decision, setDecision] = useState("建议进入下一轮");
+  const [comment, setComment] = useState("");
+  const [feedbackNotice, setFeedbackNotice] = useState("");
+  useEffect(() => { const token = new URLSearchParams(window.location.search).get("share") || ""; setShareToken(token); fetch(`/local-api/showcase${token ? `?token=${encodeURIComponent(token)}` : ""}`).then(async (response) => { const payload = await response.json(); if (!response.ok) throw new Error(payload.error || "分享页面读取失败"); return payload; }).then(setData).catch((reason) => setError(reason.message)); }, []);
+  const submitFeedback = async (subjectName: string) => {
+    if (!shareToken) return;
+    setFeedbackNotice("提交中…");
+    const response = await fetch("/local-api/showcase-feedback", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: shareToken, candidateName: subjectName, reviewer, decision, comment }) });
+    const payload = await response.json();
+    if (!response.ok) return setFeedbackNotice(payload.error || "提交失败");
+    setFeedbackNotice("评价已提交给人事"); setComment("");
+  };
+  if (error) return <main className="showcase-state"><b>暂时无法打开展示页</b><p>{error}</p></main>;
+  if (!data) return <main className="showcase-state"><b>正在读取招聘进展…</b></main>;
+  const generated = new Date(data.generatedAt).toLocaleString("zh-CN", { hour12: false });
+  return <main className="showcase-shell">
+    <header className="showcase-header"><div className="showcase-brand"><span>P</span><div><b>PeopleFlow</b><small>人事分享页面</small></div></div><div className="showcase-badge"><span>分享给：{data.audience}</span><small>数据更新：{generated}</small></div></header>
+    {data.sections.summary && <section className="showcase-hero"><div><span>人事精选分享</span><h1>招聘进展<br/>一页看清</h1><p>本页面仅包含人事选择分享的内容。联系方式、原始简历和内部评价不会在此页面显示。</p></div><div className="showcase-metrics"><article><small>正在招聘的岗位</small><b>{data.summary.jobs}</b></article><article><small>所选人才档案</small><b>{data.summary.candidates}</b></article><article><small>面试推进中</small><b>{data.summary.active}</b></article><article><small>已发 Offer</small><b>{data.summary.offers}</b></article></div></section>}
+    {data.sections.candidates && <section className="showcase-section showcase-candidates-priority"><header><div><small>点击候选人可查看评价与下一步</small><h2>候选人简要情况</h2></div><span>仅显示人事选择的信息</span></header><div className="showcase-people">{data.candidates.map((person, index) => <button className="showcase-person-row" key={`${person.job}-${index}`} onClick={() => setSelectedPerson(person)}><span>{person.name[0]}</span><div><b>{person.name}</b><small>{person.job} · {person.meta}</small></div><p>{person.tags.map((tag) => <i key={tag}>{tag}</i>)}</p><em>{person.stage}</em><strong>查看摘要 ›</strong></button>)}</div></section>}
+    {data.sections.jobs && <section className="showcase-section"><header><div><small>人事选择的招聘岗位</small><h2>岗位招聘进度</h2></div><span>共 {data.summary.jobs} 个岗位</span></header><div className="showcase-jobs">{data.jobs.map((job, index) => <article key={job.name}><div><span>{String(index + 1).padStart(2, "0")}</span><em>{job.dept}</em></div><h3>{job.name}</h3><p>人才库中共有 {job.total} 人</p><dl><div><dt>待筛选</dt><dd>{job.pending}</dd></div><div><dt>初试</dt><dd>{job.initial}</dd></div><div><dt>终试</dt><dd>{job.final}</dd></div><div><dt>Offer</dt><dd>{job.offer}</dd></div></dl></article>)}</div></section>}
+    {(data.sections.stages || data.sections.departments) && <div className="showcase-grid">{data.sections.stages && <section className="showcase-section"><header><div><small>候选人目前分布</small><h2>招聘阶段统计</h2></div></header><div className="showcase-stages">{data.stages.map((stage) => <div key={stage.name}><span>{stage.name}</span><b>{stage.count} 人</b><i style={{ width: `${Math.max(8, data.summary.candidates ? stage.count / data.summary.candidates * 100 : 0)}%` }} /></div>)}</div></section>}{data.sections.departments && <section className="showcase-section"><header><div><small>现有团队规模</small><h2>各部门人数</h2></div></header><div className="showcase-departments">{data.departments.map((department) => <div key={department.name}><span>{department.name}</span><b>{department.count} 人</b></div>)}{!data.departments.length && <p>暂无员工汇总</p>}</div></section>}</div>}
+    {data.sections.employees && <section className="showcase-section"><header><div><small>点击员工可查看本周期表现并评价</small><h2>员工表现</h2></div><span>正式员工 {data.summary.employees - data.summary.probation} 人 · 试用期 {data.summary.probation} 人</span></header><div className="showcase-employees">{data.employees.map((person) => <button key={person.name} onClick={() => setSelectedEmployee(person)}><span>{person.name[0]}</span><div><b>{person.name}</b><small>{person.department} · {person.role}</small></div><p>{person.skills.slice(0,3).map((skill) => <i key={skill}>{skill}</i>)}</p><em className={person.status === '试用期' ? 'probation' : ''}>{person.status}</em><strong>查看表现 ›</strong></button>)}</div></section>}
+    {selectedPerson && <div className="showcase-person-overlay" onMouseDown={() => setSelectedPerson(null)}><section className="showcase-person-modal" onMouseDown={(event) => event.stopPropagation()}><header><div className="showcase-person-heading"><span>{selectedPerson.name[0]}</span><div><small>候选人摘要</small><h2>{selectedPerson.name}</h2><p>{selectedPerson.job} · {selectedPerson.meta}</p></div></div><button onClick={() => setSelectedPerson(null)}>×</button></header><div className="showcase-person-tags">{selectedPerson.tags.map((tag) => <span key={tag}>{tag}</span>)}</div><div className="showcase-person-facts"><article><small>当前阶段</small><b>{selectedPerson.stage}</b></article><article><small>最近更新</small><b>{selectedPerson.latestUpdate}</b></article></div><article className="showcase-person-evaluation"><small>人事评价</small><p>{selectedPerson.evaluation}</p></article><article className="showcase-person-next"><small>下一步安排</small><b>{selectedPerson.nextAction}</b><p>{selectedPerson.nextTime}</p></article>{shareToken && <section className="showcase-feedback"><div><small>提交你的评价</small><h3>反馈给人事</h3></div><div className="showcase-feedback-grid"><label>你的姓名<input value={reviewer} onChange={(event) => setReviewer(event.target.value)} placeholder="例如：王经理"/></label><label>评价结论<select value={decision} onChange={(event) => setDecision(event.target.value)}><option>建议进入下一轮</option><option>需要补充沟通</option><option>暂不合适</option><option>建议录用</option></select></label></div><label>具体意见<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="填写能力判断、疑问或下一轮建议…"/></label><div><span>{feedbackNotice}</span><button onClick={() => submitFeedback(selectedPerson.name)}>提交评价</button></div></section>}<footer><p>此摘要不包含联系方式、原始简历及未授权内部资料。</p><button onClick={() => setSelectedPerson(null)}>关闭</button></footer></section></div>}
+    {selectedEmployee && <div className="showcase-person-overlay" onMouseDown={() => setSelectedEmployee(null)}><section className="showcase-person-modal" onMouseDown={(event) => event.stopPropagation()}><header><div className="showcase-person-heading"><span>{selectedEmployee.name[0]}</span><div><small>员工表现摘要</small><h2>{selectedEmployee.name}</h2><p>{selectedEmployee.department} · {selectedEmployee.role}</p></div></div><button onClick={() => setSelectedEmployee(null)}>×</button></header><div className="showcase-person-tags">{selectedEmployee.skills.map((skill) => <span key={skill}>{skill}</span>)}</div><div className="showcase-person-facts"><article><small>员工状态</small><b>{selectedEmployee.status}</b></article><article><small>入职时间</small><b>{selectedEmployee.joined || '待补充'}</b></article><article><small>工作地点</small><b>{selectedEmployee.location || '待补充'}</b></article><article><small>直属负责人</small><b>{selectedEmployee.manager}</b></article></div><article className="showcase-person-evaluation"><small>本周期表现</small><p>{selectedEmployee.review}</p></article>{shareToken && <section className="showcase-feedback"><div><small>提交员工评价</small><h3>反馈给人事</h3></div><div className="showcase-feedback-grid"><label>评价人<input value={reviewer} onChange={(event) => setReviewer(event.target.value)} placeholder="例如：部门负责人"/></label><label>评价结论<select value={decision} onChange={(event) => setDecision(event.target.value)}><option>表现良好</option><option>符合预期</option><option>需要辅导</option><option>建议转正</option><option>暂缓转正</option></select></label></div><label>具体评价<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="填写工作表现、能力提升和后续建议…"/></label><div><span>{feedbackNotice}</span><button onClick={() => submitFeedback(selectedEmployee.name)}>提交评价</button></div></section>}<footer><p>评价将反馈给人事，不会直接覆盖员工正式档案。</p><button onClick={() => setSelectedEmployee(null)}>关闭</button></footer></section></div>}
+    <footer className="showcase-footer"><b>PeopleFlow Workspace</b><p>这是人事生成的只读分享页面。如需查看更多资料，请联系分享人。</p></footer>
+  </main>;
+}
